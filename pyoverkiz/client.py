@@ -96,6 +96,8 @@ class OverkizClient:
     _refresh_token: str | None = None
     _expires_in: datetime.datetime | None = None
     _access_token: str | None = None
+    _local_access_token: str | None = None
+    _is_local: bool = False
 
     def __init__(
         self,
@@ -125,6 +127,10 @@ class OverkizClient:
         self.event_listener_id: str | None = None
 
         self.session = session if session else ClientSession()
+
+        if "/enduser-mobile-web/1/enduserAPI/" in server.endpoint:
+            self._is_local = True
+            self._local_access_token = token
 
     async def __aenter__(self) -> OverkizClient:
         return self
@@ -159,8 +165,6 @@ class OverkizClient:
             else:
                 # Call a simple endpoint to verify if our token is correct
                 await self.get_gateways()
-
-            return True
 
         # Somfy TaHoma authentication using access_token
         if self.server == SUPPORTED_SERVERS["somfy_europe"]:
@@ -240,7 +244,8 @@ class OverkizClient:
             return
 
         if not self._refresh_token:
-            raise ValueError("No refresh token provided. Login method must be used.")
+            raise ValueError(
+                "No refresh token provided. Login method must be used.")
 
         # &grant_type=refresh_token&refresh_token=REFRESH_TOKEN
         # Request access token
@@ -296,7 +301,8 @@ class OverkizClient:
             # {'error': 'invalid_grant',
             # 'error_description': 'Provided Authorization Grant is invalid.'}
             if "error" in token and token["error"] == "invalid_grant":
-                raise CozyTouchBadCredentialsException(token["error_description"])
+                raise CozyTouchBadCredentialsException(
+                    token["error_description"])
 
             if "token_type" not in token:
                 raise CozyTouchServiceException("No CozyTouch token provided.")
@@ -473,7 +479,8 @@ class OverkizClient:
         List execution history
         """
         response = await self.__get("history/executions")
-        execution_history = [HistoryExecution(**h) for h in humps.decamelize(response)]
+        execution_history = [HistoryExecution(
+            **h) for h in humps.decamelize(response)]
 
         return execution_history
 
@@ -740,6 +747,10 @@ class OverkizClient:
         if self._access_token:
             headers["Authorization"] = f"Bearer {self._access_token}"
 
+        # TODO check what is the definitive header
+        if self._local_access_token:
+            headers["X-Auth-Token"] = f"Bearer {self._access_token}"
+
         async with self.session.get(
             f"{self.server.endpoint}{path}",
             headers=headers,
@@ -757,6 +768,10 @@ class OverkizClient:
             await self._refresh_token_if_expired()
             headers["Authorization"] = f"Bearer {self._access_token}"
 
+        # TODO check what is the definitive header
+        if self._local_access_token:
+            headers["X-Auth-Token"] = f"Bearer {self._access_token}"
+
         async with self.session.post(
             f"{self.server.endpoint}{path}", data=data, json=payload, headers=headers
         ) as response:
@@ -771,6 +786,10 @@ class OverkizClient:
 
         if self._access_token:
             headers["Authorization"] = f"Bearer {self._access_token}"
+
+        # TODO check what is the definitive header
+        if self._local_access_token:
+            headers["X-Auth-Token"] = f"Bearer {self._access_token}"
 
         async with self.session.delete(
             f"{self.server.endpoint}{path}", headers=headers
@@ -788,7 +807,8 @@ class OverkizClient:
         except JSONDecodeError as error:
             result = await response.text()
             if "Server is down for maintenance" in result:
-                raise MaintenanceException("Server is down for maintenance") from error
+                raise MaintenanceException(
+                    "Server is down for maintenance") from error
             raise Exception(
                 f"Unknown error while requesting {response.url}. {response.status} - {result}"
             ) from error
