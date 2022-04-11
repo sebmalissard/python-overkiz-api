@@ -131,9 +131,6 @@ class OverkizClient:
         self.session = session if session else ClientSession()
 
         if "/enduser-mobile-web/1/enduserAPI/" in server.endpoint:
-            self._is_local = True
-            self._access_token = token
-
             # To avoid security issues, we add the following authority to
             # our HTTPS client trust store: https://ca.overkiz.com/overkiz-root-ca-2048.crt
             self._ssl_context = ssl.create_default_context(
